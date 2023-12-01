@@ -13,9 +13,18 @@ Python script to create documents via Churchtools API.
   * See [Getting a login token](#getting-a-login-token)
 * Copy template.sample.odt to template.odt and adjust to your preferences (Use [LibreOffice](https://www.libreoffice.org/) to modify the template).
   * Check the [template language documentation](https://py3otemplate.readthedocs.io/)
-* Install [Python 3](https://www.python.org/)
+* Install [Python 3](https://www.python.org/) and [pip](
 * Install Python dependencies:
   * `pip install pyactiveresource py3o.template`
+ 
+### Install on ubuntu
+
+```
+apt install python3 python3-full python3-dotenv
+python3 -m venv ~/.local --system-site-packages
+~/.local/bin/pip install pyactiveresource py3o.template
+~/.local/bin/python ./create-memberlist.py
+```
 
 ## Usage
 
