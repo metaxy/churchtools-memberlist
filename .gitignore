@@ -1,6 +1,7 @@
 .env
 .vscode
 *.pdf
+*.odt
 *.sh
 images/
 __pycache__/
