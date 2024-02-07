@@ -1,9 +1,9 @@
 .env
 .vscode
 *.pdf
-*.odt
 *.sh
 images/
 __pycache__/
 persons*.dump
 .~lock*
+

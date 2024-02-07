@@ -17,6 +17,8 @@ Python script to create documents via Churchtools API.
 * Create a virtual env for this project, and activate the venv. [More information](https://docs.python.org/3/library/venv.html)
 * Install Python dependencies:
   * `pip install -r requirements.txt`
+
+* Rename `template_prayerlist_example.odt` to `template_prayerlist.odt`
  
 ### Install on ubuntu
 
