@@ -7,7 +7,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import argparse
-
+import logging
 import churchtoolsapi
 
 from py3o.template import Template
@@ -20,13 +20,19 @@ parser.add_argument("--filter-status", help="Filter by status")
 
 parser.add_argument("--template", default="template_memberlist.odt", help="custom template file (odt)")
 parser.add_argument("--output", default="memberlist.odt", help="output file (odt)")
+parser.add_argument("--log", default=None, help="log file")
 args = parser.parse_args()
 
 # Create template
 t = Template(args.template, args.output)
 
+if(args.log != None):
+    logging.basicConfig(filename=args.log, level=logging.INFO)
+
 # Sort persons by their family
-persons_sorted = churchtoolsapi.get_persons(args.filter_group, args.filter_role, args.filter_status.split(","), include_images=True)
+persons_sorted = churchtoolsapi.get_persons(args.filter_group, args.filter_role, args.filter_status, include_images=True)
 
 data = dict(persons=persons_sorted)
 t.render(data)
+
+
