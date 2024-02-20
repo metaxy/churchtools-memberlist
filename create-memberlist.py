@@ -30,7 +30,7 @@ if(args.log != None):
     logging.basicConfig(filename=args.log, level=logging.INFO)
 
 # Sort persons by their family
-persons_sorted = churchtoolsapi.get_persons(args.filter_group, args.filter_role, args.filter_status, include_images=True)
+persons_sorted = churchtoolsapi.get_persons(args.filter_group, args.filter_role, args.filter_status.split(","), include_images=True)
 
 data = dict(persons=persons_sorted)
 t.render(data)

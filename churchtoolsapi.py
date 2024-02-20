@@ -18,12 +18,14 @@ from PIL import Image, ImageDraw, ImageFilter
 from pyactiveresource.activeresource import ActiveResource
 
 # DEBUG MODE (cache REST API result)
-DEBUG = False
+DEBUG = True
 CACHED_FILENAME = "persons_{group_id}.dump"
 
 # Random limits from Churchtools API
 MAX_PERSONS_LIMIT = 500
 MAX_GROUP_MEMBERS_LIMIT = 100
+
+
 
 load_dotenv()
 
@@ -52,7 +54,7 @@ def str_to_date(birthdate_str):
 
 def __age(birthdate_str):
     if not birthdate_str:
-        return ""
+        return 0
     birthdate = str_to_date(birthdate_str)
     today = datetime.date.today()
     age = today.year - birthdate.year - ((today.month, today.day) < (birthdate.month, birthdate.day))
@@ -85,19 +87,24 @@ def __make_img_round(img_bytes):
     return img_byte_arr.getvalue()
 
 
-def get_persons(filter_group_id=None, filter_role_id=None, include_images=False):
+def get_persons(filter_group_id=None, filter_role_id=None, filter_status=None, include_images=False):
     filter_group_id = int(filter_group_id) if filter_group_id else None
     filter_role_id = int(filter_role_id) if filter_role_id else None
+
     filename = CACHED_FILENAME.format(group_id=filter_group_id)
     if DEBUG and exists(filename):
         with open(filename, 'rb') as f:
             return pickle.load(f)
 
-    # Get all persons
-    persons_result = Person.find(from_=ApiBase._site + 'persons', limit=MAX_PERSONS_LIMIT)
+
+    if(filter_status != None):
+        persons_result = Person.find(from_=ApiBase._site + 'persons', status_ids=filter_status, page=1, limit=MAX_PERSONS_LIMIT)
+    else:
+        persons_result = Person.find(from_=ApiBase._site + 'persons', page=1, limit=MAX_PERSONS_LIMIT)
+
     persons = persons_result[0]['data']
 
-    # Filter only those in current group
+    # Filter only those in group specified by filter_group_id
     if filter_group_id:
         persons_filtered = []
         group_url = ApiBase._site + 'groups/{id}/members'.format(id=filter_group_id)
@@ -136,16 +143,18 @@ def get_persons(filter_group_id=None, filter_role_id=None, include_images=False)
         # Format birthdate
         if person['birthday']:
             person['birthday_date'] = str_to_date(person['birthday'])
+            person['age'] = __age(person['birthday'])
             person['birthday'] = format_date(person['birthday'])
         else:
             person['birthday_date'] = None
+            person['age'] = 0
 
         # Relationships (Spouse, children)
         relationships_url = ApiBase._site + 'persons/{id}/relationships'.format(id=person['id'])
         relationships_result = Person.find(from_=relationships_url, limit=MAX_PERSONS_LIMIT)
         relationships = relationships_result[0]['data']
         person['children'] = []
-        person['family_id'] = person['lastName']
+        person['family_id'] = person['lastName'] + "-" + str(person['age'] or '000') + "-999"
         person['familyEnd'] = False
         personHasSpouse = False
         if not relationships:
@@ -158,22 +167,21 @@ def get_persons(filter_group_id=None, filter_role_id=None, include_images=False)
                 if len(child_result) > 0:
                     child.birthdate = str_to_date(child_result[0]['birthday'])
                     child.age = ' (' + str(__age(child_result[0]['birthday'])) + ')'
+                    if(__age(child_result[0]['birthday']) < 18):
+                        person['children'].append(child)
 
-                person['children'].append(child)
             elif relationship['relationshipTypeId'] == 2: # Ehepartner
                 personHasSpouse = True
                 person['spouse'] = relationship['relative']['domainIdentifier']
                 # Create family_id for sorting (last name, ID of husband & wife)
                 if person['sexId'] == 1: # Male
-                    person['family_id'] = '{lastname}-{husband_id}-{wife_id}'.format(
+                    person['family_id'] = '{lastname}-000-{husband_id}'.format(
                                             lastname=person['lastName'],
-                                            husband_id=str(person['id']),
-                                            wife_id=str(relationship['relative']['domainIdentifier']))
+                                            husband_id=str(person['id']))
                 else: # Female
-                    person['family_id'] = '{lastname}-{husband_id}-{wife_id}'.format(
-                                            lastname=person['lastName'],
-                                            husband_id=str(relationship['relative']['domainIdentifier']),
-                                            wife_id=str(person['id']))
+                    person['family_id'] = '{lastname}-000-{husband_id}'.format(
+                                            lastname=str(relationship['relative']['domainAttributes']['lastName']),
+                                            husband_id=str(relationship['relative']['domainIdentifier']))
                     person['familyEnd'] = True
 
         if not personHasSpouse:
@@ -183,7 +191,10 @@ def get_persons(filter_group_id=None, filter_role_id=None, include_images=False)
         person['children'].sort()
 
         # All children in one line
-        person['allChildren'] = ', '.join(str(child) for child in person['children'])
+        if (not personHasSpouse or person['sexId'] == 1):
+            person['allChildren'] = ', '.join(str(child) for child in person['children'])
+        else:
+            person['allChildren'] = ''
 
     # Sort persons by their family
     persons_sorted = sorted(persons, key = lambda p: (p['family_id'], p['sexId']))

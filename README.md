@@ -26,9 +26,7 @@ Python script to create documents via Churchtools API.
 apt install python3 python3-full python3-dotenv
 python3 -m venv ~/.local --system-site-packages
 ~/.local/bin/pip install -r requirements.txt
-~/.local/bin/python ./create-memberlist.py
 ```
-
 
 ## Usage
 
@@ -48,7 +46,14 @@ Creates a membership directory.
     [--output memberlist.odt]
 ```
 
-The `--filter-group` param is used to filter by a certain group in Churchtools.
+```bash
+./create-memberlist.py \
+    --filter-status <status_id> \
+    [--template template_memberlist.odt] \
+    [--output memberlist.odt]
+```
+
+The `--filter-group` and `--filter-status`  param is used to filter by a certain group/status.
 
 ### Prayer list
 
