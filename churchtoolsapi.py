@@ -154,7 +154,7 @@ def get_persons(filter_group_id=None, filter_role_id=None, filter_status=None, i
         relationships_result = Person.find(from_=relationships_url, limit=MAX_PERSONS_LIMIT)
         relationships = relationships_result[0]['data']
         person['children'] = []
-        person['family_id'] = person['lastName'] + "-" + str(person['age'] or '000') + "-999"
+        person['family_id'] = "{}-{}".format(person['lastName'], person['firstName'])
         person['familyEnd'] = False
         personHasSpouse = False
         if not relationships:
@@ -167,34 +167,40 @@ def get_persons(filter_group_id=None, filter_role_id=None, filter_status=None, i
                 if len(child_result) > 0:
                     child.birthdate = str_to_date(child_result[0]['birthday'])
                     child.age = ' (' + str(__age(child_result[0]['birthday'])) + ')'
-                    if(__age(child_result[0]['birthday']) < 18):
+                    if(__age(child_result[0]['birthday']) < 18): #show children only if they are underage
                         person['children'].append(child)
 
             elif relationship['relationshipTypeId'] == 2: # Ehepartner
                 personHasSpouse = True
-                person['spouse'] = relationship['relative']['domainIdentifier']
                 # Create family_id for sorting (last name, ID of husband & wife)
                 if person['sexId'] == 1: # Male
-                    person['family_id'] = '{lastname}-000-{husband_id}'.format(
+                    person['family_id'] = '{lastname}-{husband_name}-{wife_name}-{husband_id}'.format(
                                             lastname=person['lastName'],
-                                            husband_id=str(person['id']))
+                                            husband_id=str(person['id']),
+                                            husband_name=person['firstName'],
+                                            wife_name=str(relationship['relative']['domainAttributes']['firstName']))
                 else: # Female
-                    person['family_id'] = '{lastname}-000-{husband_id}'.format(
+                    person['family_id'] = '{lastname}-{husband_name}-{wife_name}-{husband_id}'.format(
                                             lastname=str(relationship['relative']['domainAttributes']['lastName']),
-                                            husband_id=str(relationship['relative']['domainIdentifier']))
+                                            husband_id=str(relationship['relative']['domainIdentifier']),
+                                            husband_name=str(relationship['relative']['domainAttributes']['firstName']),
+                                            wife_name=person['firstName'])
                     person['familyEnd'] = True
 
         if not personHasSpouse:
             person['familyEnd'] = True
 
         # Sort children by age
-        person['children'].sort()
+        person['children'].sort(reverse=True)
 
         # All children in one line
+        person['allChildren'] = ', '.join(str(child) for child in person['children'])
+
+        #Show children only once
         if (not personHasSpouse or person['sexId'] == 1):
-            person['allChildren'] = ', '.join(str(child) for child in person['children'])
+            person['allChildrenOnce'] = ', '.join(str(child) for child in person['children'])
         else:
-            person['allChildren'] = ''
+            person['allChildrenOnce'] = ''
 
     # Sort persons by their family
     persons_sorted = sorted(persons, key = lambda p: (p['family_id'], p['sexId']))
