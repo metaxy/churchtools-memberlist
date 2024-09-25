@@ -11,15 +11,16 @@ import io
 import pickle
 import os
 import requests
+import json
 
 from dotenv import load_dotenv
 from os.path import exists
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageOps
 from pyactiveresource.activeresource import ActiveResource
 
 # DEBUG MODE (cache REST API result)
-DEBUG = True
-CACHED_FILENAME = "persons_{group_id}.dump"
+CACHE_RESPONSE = False
+CACHED_FILENAME = "persons_{status_id}.dump"
 
 # Random limits from Churchtools API
 MAX_PERSONS_LIMIT = 500
@@ -79,66 +80,59 @@ def __mask_circle_transparent(pil_img, blur_radius, offset=0):
 
     return result
 
-def __make_img_round(img_bytes):
+def make_img_round(img_bytes, border_color=None):
     im = Image.open(io.BytesIO(img_bytes))
     im_round = __mask_circle_transparent(im, 0, 2)
+    if(border_color != None):
+        im_round = ImageOps.expand(im_round,border=8,fill=border_color)
     img_byte_arr = io.BytesIO()
     im_round.save(img_byte_arr, format='PNG')
     return img_byte_arr.getvalue()
 
-
-def get_persons(filter_group_id=None, filter_role_id=None, filter_status=None, include_images=False):
-    filter_group_id = int(filter_group_id) if filter_group_id else None
-    filter_role_id = int(filter_role_id) if filter_role_id else None
-
-    filename = CACHED_FILENAME.format(group_id=filter_group_id)
-    if DEBUG and exists(filename):
-        with open(filename, 'rb') as f:
+def get_persons_by_status(filter_status=None, cache_response=False):
+    cache_filename = "get_persons.dump"
+    if cache_response and exists(cache_filename):
+        with open(cache_filename, 'rb') as f:
             return pickle.load(f)
-
 
     if(filter_status != None):
         persons_result = Person.find(from_=ApiBase._site + 'persons', status_ids=filter_status, page=1, limit=MAX_PERSONS_LIMIT)
     else:
         persons_result = Person.find(from_=ApiBase._site + 'persons', page=1, limit=MAX_PERSONS_LIMIT)
-
     persons = persons_result[0]['data']
 
-    # Filter only those in group specified by filter_group_id
-    if filter_group_id:
-        persons_filtered = []
-        group_url = ApiBase._site + 'groups/{id}/members'.format(id=filter_group_id)
-        persons_in_group_result = Group.find(from_=group_url, limit=MAX_GROUP_MEMBERS_LIMIT)
-        persons_in_group = persons_in_group_result[0]['data']
-        # Remove persons not in this group from persons
-        for person in persons:
-            found = False
-            for group_person in persons_in_group:
-                if group_person['personId'] == person['id']:
-                    found = True
+    persons_sorted = process_persons
 
-                if filter_role_id:
-                    found = found and group_person['groupTypeRoleId'] == filter_role_id
+    if cache_response:
+        with open(cache_filename, 'wb') as f:
+            pickle.dump(persons_sorted, f)
 
-                if found:
-                    break
-            if found:
-                persons_filtered.append(person)
-        persons = persons_filtered
+    return persons_sorted
+
+
+def process_persons(persons, include_images=False):
 
     # Postprocessing
     for person in persons:
+            # Get groups the person is enrolled in
+        person_groups_url = ApiBase._site + 'persons/{id}/groups'.format(id=person['id'])
+        person_groups_result = Group.find(from_=person_groups_url, limit=MAX_PERSONS_LIMIT)
+        person_groups = person_groups_result[0]['data']
+
+        group_names = [group['group']['title'] for group in person_groups]
+        person['groups'] = group_names
+
         # Profile pic
         if include_images:
             if person['imageUrl']:
-                person['image'] = requests.get(person['imageUrl']).content
+                person['image_source'] = requests.get(person['imageUrl']).content
             else:
                 default_img_path = os.path.realpath(os.path.dirname(__file__)) + '/images/placeholder.png'
                 img = open(default_img_path,'rb')
-                person['image'] = bytes(img.read())
+                person['image_source'] = bytes(img.read())
 
             # Make image round
-            person['image'] = __make_img_round(person['image'])
+            person['image'] = make_img_round(person['image_source'], 'red')
 
         # Format birthdate
         if person['birthday']:
@@ -206,8 +200,8 @@ def get_persons(filter_group_id=None, filter_role_id=None, filter_status=None, i
     persons_sorted = sorted(persons, key = lambda p: (p['family_id'], p['sexId']))
 
     # Cache result if in debug mode
-    if DEBUG:
-        with open(filename, 'wb') as f:
+    if cache_response:
+        with open(cache_filename, 'wb') as f:
             pickle.dump(persons_sorted, f)
 
     return persons_sorted
